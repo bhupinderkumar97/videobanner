@@ -7,7 +7,7 @@ import BannerVideo from '../Assets/Hailuo_Video_A cinematic forward tracking s_4
 gsap.registerPlugin(ScrollTrigger);
 
 // --- GSAP ScrollTrigger Setup Function ---
-const setupVideoScrub = (video, container, isLowPerformance = false) => {
+const setupVideoScrub = (video, container) => {
     ScrollTrigger.getById('video-scrub')?.kill();
 
     ScrollTrigger.create({
@@ -15,15 +15,15 @@ const setupVideoScrub = (video, container, isLowPerformance = false) => {
         trigger: container,
         start: 'top top',
         end: 'bottom bottom',
-        scrub: isLowPerformance ? 1.5 : 1, // Higher scrub for low-performance PCs
-        immediateRender: false,
+        scrub: 0.7, // Increased scrub for smoother interpolation
+        immediateRender: false, // Prevent unnecessary initial renders
         onUpdate: (self) => {
             const progress = self.progress;
             const newTime = progress * video.duration;
 
-            // Throttle updates with requestAnimationFrame
+            // Throttle updates with requestAnimationFrame and a larger threshold
             requestAnimationFrame(() => {
-                if (Math.abs(video.currentTime - newTime) > (isLowPerformance ? 0.5 : 0.3)) { // Larger threshold for low-performance
+                if (Math.abs(video.currentTime - newTime) > 0.2) { // Larger threshold
                     video.currentTime = newTime;
                 }
             });
@@ -42,30 +42,27 @@ export default function VideoBanner() {
 
         if (!video || !container) return;
 
-        // Optimize video settings
+        // Optimize video settings for Windows
         video.preload = 'auto';
         video.muted = true;
         video.playsInline = true;
-        video.disablePictureInPicture = true;
-
-        // Detect low-performance system (basic heuristic)
-        const isLowPerformance = navigator.hardwareConcurrency <= 4 || !window.matchMedia('(min-resolution: 2dppx)').matches;
+        video.disablePictureInPicture = true; // Reduce overhead
 
         const handleVideoReady = () => {
-            console.log('Video readyState:', video.readyState, 'Duration:', video.duration);
             video.currentTime = 0;
             video.pause();
-            setupVideoScrub(video, container, isLowPerformance);
+            setupVideoScrub(video, container);
         };
 
-        // Force GPU rendering
-        video.style.transform = 'translateZ(0)';
-
+        // Ensure video is fully buffered before enabling scrub
         if (video.readyState >= 3) {
             handleVideoReady();
         } else {
             video.addEventListener('canplaythrough', handleVideoReady, { once: true });
         }
+
+        // Enable hardware acceleration explicitly
+        video.style.transform = 'translateZ(0)'; // Force GPU rendering
 
         // Cleanup
         return () => {
@@ -75,15 +72,15 @@ export default function VideoBanner() {
     }, []);
 
     return (
-        <div ref={containerRef} className="scroll-video-section relative h-[350vh] bg-black">
+        <div ref={containerRef} className="scroll-video-section relative h-[400vh] bg-black">
             <div className="sticky top-0 h-screen overflow-hidden">
                 <video
                     ref={videoRef}
                     muted
                     playsInline
                     preload="auto"
-                    className="h-full w-full object-cover will-change-transform backface-hidden"
-                    style={{ transform: 'translateZ(0)' }}
+                    className="h-full w-full object-cover will-change-transform"
+                    style={{ transform: 'translateZ(0)' }} // Force GPU rendering
                 >
                     <source src={BannerVideo} type="video/mp4" />
                     <p>Your browser does not support the video tag.</p>
