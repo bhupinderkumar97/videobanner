@@ -1,88 +1,91 @@
-import React, { useEffect, useRef } from "react";
-import BannerVideo from "../Assets/Hailuo_Video_A cinematic forward tracking s_427492511959605251.mp4"; // Verify this path
-import Lenis from "@studio-freight/lenis";
+import React, { useRef, useEffect } from 'react';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import BannerVideo from '../Assets/Hailuo_Video_A cinematic forward tracking s_427492511959605251.mp4';
 
+// Register the ScrollTrigger plugin with GSAP
+gsap.registerPlugin(ScrollTrigger);
+
+// --- GSAP ScrollTrigger Setup Function ---
+const setupVideoScrub = (video, container) => {
+    ScrollTrigger.getById('video-scrub')?.kill();
+
+    ScrollTrigger.create({
+        id: 'video-scrub',
+        trigger: container,
+        start: 'top top',
+        end: 'bottom bottom',
+        scrub: 0.7, // Increased scrub for smoother interpolation
+        immediateRender: false, // Prevent unnecessary initial renders
+        onUpdate: (self) => {
+            const progress = self.progress;
+            const newTime = progress * video.duration;
+
+            // Throttle updates with requestAnimationFrame and a larger threshold
+            requestAnimationFrame(() => {
+                if (Math.abs(video.currentTime - newTime) > 0.2) { // Larger threshold
+                    video.currentTime = newTime;
+                }
+            });
+        },
+    });
+};
+
+// --- Main React Component ---
 export default function VideoBanner() {
-  const videoRef = useRef(null);
-  const scrollFractionRef = useRef(0);
-  const rafRef = useRef(null);
-  const lenisRef = useRef(null);
+    const videoRef = useRef(null);
+    const containerRef = useRef(null);
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    useEffect(() => {
+        const video = videoRef.current;
+        const container = containerRef.current;
 
-    // Ensure video is ready before manipulating
-    video.pause();
-    video.currentTime = 0; // Start at beginning
+        if (!video || !container) return;
 
-    // Initialize Lenis
-    const lenis = new Lenis({
-      duration: 1,
-      easing: (t) => t, // Linear easing
-      smooth: true,
-    });
-    lenisRef.current = lenis;
+        // Optimize video settings for Windows
+        video.preload = 'auto';
+        video.muted = true;
+        video.playsInline = true;
+        video.disablePictureInPicture = true; // Reduce overhead
 
-    // Update scroll fraction based on Lenis scroll position
-    const updateScrollFraction = () => {
-      const scrollTop = lenis.scroll; // Use Lenis scroll position
-      const container = document.querySelector(".video-container");
-      const containerHeight = container?.scrollHeight - window.innerHeight || 1;
-      let scrollFraction = scrollTop / containerHeight;
-      scrollFraction = Math.min(Math.max(scrollFraction, 0), 1);
-      scrollFractionRef.current = scrollFraction;
-    };
+        const handleVideoReady = () => {
+            video.currentTime = 0;
+            video.pause();
+            setupVideoScrub(video, container);
+        };
 
-    // Animation loop
-    const animate = () => {
-      const video = videoRef.current;
-      if (video && video.readyState >= 2 && video.duration) {
-        const targetTime = video.duration * scrollFractionRef.current;
-        video.currentTime += (targetTime - video.currentTime) * .1; // Adjusted lerp factor
-      }
-      rafRef.current = requestAnimationFrame(animate);
-    };
+        // Ensure video is fully buffered before enabling scrub
+        if (video.readyState >= 3) {
+            handleVideoReady();
+        } else {
+            video.addEventListener('canplaythrough', handleVideoReady, { once: true });
+        }
 
-    // Lenis RAF loop
-    const lenisRaf = (time) => {
-      lenis.raf(time);
-      requestAnimationFrame(lenisRaf);
-    };
+        // Enable hardware acceleration explicitly
+        video.style.transform = 'translateZ(0)'; // Force GPU rendering
 
-    // Start video playback (handle autoplay policy)
-    video.play().catch((error) => {
-      console.error("Video playback failed:", error);
-      // Optionally show a play button for user interaction
-    });
+        // Cleanup
+        return () => {
+            ScrollTrigger.getAll().forEach(trigger => trigger.kill());
+            video.removeEventListener('canplaythrough', handleVideoReady);
+        };
+    }, []);
 
-    // Add scroll listener and start animations
-    lenis.on("scroll", updateScrollFraction);
-    updateScrollFraction(); // Initial calculation
-    rafRef.current = requestAnimationFrame(animate);
-    requestAnimationFrame(lenisRaf);
-
-    // Cleanup
-    return () => {
-      lenis.off("scroll", updateScrollFraction);
-      cancelAnimationFrame(rafRef.current);
-      lenis.destroy();
-    };
-  }, []);
-
-  return (
-    <div className="video-container" style={{ height: "4000px" }}>
-      <video
-        ref={videoRef}
-        style={{ position: "sticky", top: 0, width: "100%", display: "block" }}
-        muted
-        playsInline
-        preload="auto"
-        aria-label="Scroll-driven video animation"
-      >
-        <source src={BannerVideo} type="video/mp4" />
-        <p>Your browser does not support the video tag.</p>
-      </video>
-    </div>
-  );
+    return (
+        <div ref={containerRef} className="scroll-video-section relative h-[400vh] bg-black">
+            <div className="sticky top-0 h-screen overflow-hidden">
+                <video
+                    ref={videoRef}
+                    muted
+                    playsInline
+                    preload="auto"
+                    className="h-full w-full object-cover will-change-transform"
+                    style={{ transform: 'translateZ(0)' }} // Force GPU rendering
+                >
+                    <source src={BannerVideo} type="video/mp4" />
+                    <p>Your browser does not support the video tag.</p>
+                </video>
+            </div>
+        </div>
+    );
 }
